@@ -461,7 +461,9 @@ class _HomeScreenState extends State<HomeScreen> {
         contacts.add(saved);
       } else {
         final index = contacts.indexOf(existing);
-        contacts[index] = saved;
+        if (index != -1) {
+          contacts[index] = saved;
+        }
       }
     });
   }
@@ -649,20 +651,25 @@ class ContactsTab extends StatelessWidget {
               ),
             ),
             title: Text(contact.name),
-            subtitle: Text('${contact.number} • ${contact.relationship}'),
-            trailing: Wrap(
-              children: [
-                IconButton(
-                  tooltip: 'Edit',
-                  onPressed: () => onEdit(contact),
-                  icon: const Icon(Icons.edit_outlined),
-                ),
-                IconButton(
-                  tooltip: 'Delete',
-                  onPressed: () => onDelete(contact),
-                  icon: const Icon(Icons.delete_outline),
-                ),
-              ],
+            subtitle: Text('${contact.number} - ${contact.relationship}'),
+            trailing: SizedBox(
+              width: 96,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: 'Edit',
+                    onPressed: () => onEdit(contact),
+                    icon: const Icon(Icons.edit_outlined),
+                  ),
+                  IconButton(
+                    tooltip: 'Delete',
+                    onPressed: () => onDelete(contact),
+                    icon: const Icon(Icons.delete_outline),
+                  ),
+                ],
+              ),
             ),
           );
         },

@@ -325,29 +325,11 @@ class _HomeScreenState extends State<HomeScreen> {
   late bool permissionsGranted;
   DeviceLocation? currentLocation;
   bool refreshingLocation = false;
+  bool sendingAlert = false;
   String emergencyMessage =
       'Emergency Alert! I need assistance. Please contact me immediately.';
 
-  final contacts = <EmergencyContact>[
-    const EmergencyContact(
-      name: 'Mother',
-      number: '09123456789',
-      relationship: 'Family',
-      priority: true,
-    ),
-    const EmergencyContact(
-      name: 'Brother',
-      number: '09987654321',
-      relationship: 'Family',
-      priority: true,
-    ),
-    const EmergencyContact(
-      name: 'Security',
-      number: '09111111111',
-      relationship: 'Responder',
-    ),
-  ];
-
+  late final Map<String, List<EmergencyContact>> emergencyContacts;
   final logs = <SmsLog>[];
 
   @override
@@ -355,28 +337,33 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     permissionsGranted = widget.permissionsGranted;
     currentLocation = widget.initialLocation;
+    emergencyContacts = {
+      for (final type in emergencyTypes) type.id: [...type.agencyContacts],
+    };
   }
 
   @override
   Widget build(BuildContext context) {
     final pages = [
       DashboardTab(
-        contacts: contacts,
+        contactCount: emergencyContacts[selectedEmergencyId]?.length ?? 0,
         emergencyTypes: emergencyTypes,
         selectedEmergencyId: selectedEmergencyId,
         includeLocation: includeLocation,
         currentLocation: currentLocation,
         permissionsGranted: permissionsGranted,
+        sendingAlert: sendingAlert,
         onEmergencySelected: (id) => setState(() => selectedEmergencyId = id),
         onSendAlert: confirmAlert,
         onRefreshLocation: refreshLocation,
       ),
       ContactsTab(
-        contacts: contacts,
-        onAdd: () => editContact(),
+        emergencyTypes: emergencyTypes,
+        emergencyContacts: emergencyContacts,
+        onAdd: (typeId) => editContact(typeId),
         onEdit: editContact,
-        onDelete: (contact) {
-          setState(() => contacts.remove(contact));
+        onDelete: (typeId, contact) {
+          setState(() => emergencyContacts[typeId]?.remove(contact));
         },
       ),
       MessageTab(
@@ -396,7 +383,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('SOS'),
+        title: const Text('One Button SMS'),
         backgroundColor: const Color(0xFFD71920),
         foregroundColor: Colors.white,
         actions: [
@@ -474,6 +461,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> confirmAlert() async {
+    if (sendingAlert) return;
+
     final messenger = ScaffoldMessenger.of(context);
     final emergencyType = emergencyTypes.firstWhere(
       (type) => type.id == selectedEmergencyId,
@@ -488,29 +477,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Send ${emergencyType.agency} SOS?'),
-        content: Text(
-          'This will send your location and alert message to ${recipients.length} recipient(s).',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton.icon(
-            onPressed: () => Navigator.pop(context, true),
-            icon: const Icon(Icons.sms),
-            label: const Text('Send Alert'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-    if (!mounted) return;
+    setState(() => sendingAlert = true);
 
     DeviceLocation? location = currentLocation;
     if (includeLocation) {
@@ -528,6 +495,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) return;
 
     setState(() {
+      sendingAlert = false;
       for (final contact in recipients) {
         logs.insert(
           0,
@@ -547,10 +515,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   List<EmergencyContact> emergencyRecipients(EmergencyTypeData emergencyType) {
-    final recipients = <EmergencyContact>[
-      ...emergencyType.agencyContacts,
-      ...contacts,
-    ];
+    final recipients = emergencyContacts[emergencyType.id] ?? [];
     final seen = <String>{};
 
     return recipients.where((contact) {
@@ -573,7 +538,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return '${emergencyType.messagePrefix}$locationText$customText';
   }
 
-  Future<void> editContact([EmergencyContact? existing]) async {
+  Future<void> editContact(String typeId, [EmergencyContact? existing]) async {
     final saved = await showDialog<EmergencyContact>(
       context: context,
       builder: (context) => ContactDialog(existing: existing),
@@ -583,6 +548,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) return;
 
     setState(() {
+      final contacts = emergencyContacts[typeId] ??= [];
       if (existing == null) {
         contacts.add(saved);
       } else {
@@ -702,23 +668,25 @@ class _ContactDialogState extends State<ContactDialog> {
 class DashboardTab extends StatelessWidget {
   const DashboardTab({
     super.key,
-    required this.contacts,
+    required this.contactCount,
     required this.emergencyTypes,
     required this.selectedEmergencyId,
     required this.includeLocation,
     required this.currentLocation,
     required this.permissionsGranted,
+    required this.sendingAlert,
     required this.onEmergencySelected,
     required this.onSendAlert,
     required this.onRefreshLocation,
   });
 
-  final List<EmergencyContact> contacts;
+  final int contactCount;
   final List<EmergencyTypeData> emergencyTypes;
   final String selectedEmergencyId;
   final bool includeLocation;
   final DeviceLocation? currentLocation;
   final bool permissionsGranted;
+  final bool sendingAlert;
   final ValueChanged<String> onEmergencySelected;
   final VoidCallback onSendAlert;
   final VoidCallback onRefreshLocation;
@@ -802,7 +770,7 @@ class DashboardTab extends StatelessWidget {
         Expanded(
           child: Center(
             child: GestureDetector(
-              onTap: onSendAlert,
+              onTap: sendingAlert ? null : onSendAlert,
               child: Container(
                 width: 224,
                 height: 224,
@@ -825,15 +793,19 @@ class DashboardTab extends StatelessWidget {
                       shape: BoxShape.circle,
                       color: selectedEmergency.color,
                     ),
-                    child: const Center(
-                      child: Text(
-                        'SOS',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 44,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
+                    child: Center(
+                      child: sendingAlert
+                          ? const CircularProgressIndicator(
+                              color: Colors.white,
+                            )
+                          : const Text(
+                              'SOS',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 44,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
                     ),
                   ),
                 ),
@@ -854,7 +826,7 @@ class DashboardTab extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               Text(
-                '${selectedEmergency.description} • ${contacts.length} saved contact(s)',
+                '$contactCount ${selectedEmergency.agency} contact(s) ready',
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: Colors.black54),
               ),
@@ -932,12 +904,59 @@ class _QuickStatus extends StatelessWidget {
 class ContactsTab extends StatelessWidget {
   const ContactsTab({
     super.key,
+    required this.emergencyTypes,
+    required this.emergencyContacts,
+    required this.onAdd,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final List<EmergencyTypeData> emergencyTypes;
+  final Map<String, List<EmergencyContact>> emergencyContacts;
+  final ValueChanged<String> onAdd;
+  final void Function(String typeId, EmergencyContact contact) onEdit;
+  final void Function(String typeId, EmergencyContact contact) onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: emergencyTypes.length,
+      child: Scaffold(
+        appBar: TabBar(
+          isScrollable: true,
+          tabs: [
+            for (final type in emergencyTypes)
+              Tab(icon: Icon(type.icon), text: type.agency),
+          ],
+        ),
+        body: TabBarView(
+          children: [
+            for (final type in emergencyTypes)
+              AgencyContactsList(
+                type: type,
+                contacts: emergencyContacts[type.id] ?? const [],
+                onAdd: () => onAdd(type.id),
+                onEdit: (contact) => onEdit(type.id, contact),
+                onDelete: (contact) => onDelete(type.id, contact),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class AgencyContactsList extends StatelessWidget {
+  const AgencyContactsList({
+    super.key,
+    required this.type,
     required this.contacts,
     required this.onAdd,
     required this.onEdit,
     required this.onDelete,
   });
 
+  final EmergencyTypeData type;
   final List<EmergencyContact> contacts;
   final VoidCallback onAdd;
   final ValueChanged<EmergencyContact> onEdit;
@@ -946,52 +965,54 @@ class ContactsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: ListView.separated(
-        padding: const EdgeInsets.all(20),
-        itemBuilder: (context, index) {
-          final contact = contacts[index];
-          return ListTile(
-            tileColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-              side: const BorderSide(color: Color(0xFFE2E8F0)),
+      body: contacts.isEmpty
+          ? Center(child: Text('No ${type.agency} contacts yet.'))
+          : ListView.separated(
+              padding: const EdgeInsets.all(20),
+              itemBuilder: (context, index) {
+                final contact = contacts[index];
+                return ListTile(
+                  tileColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: const BorderSide(color: Color(0xFFE2E8F0)),
+                  ),
+                  leading: CircleAvatar(
+                    backgroundColor: contact.priority
+                        ? const Color(0xFFFFE4E6)
+                        : const Color(0xFFE0F2FE),
+                    child: Icon(
+                      contact.priority ? Icons.star : type.icon,
+                      color: contact.priority
+                          ? const Color(0xFFD71920)
+                          : type.color,
+                    ),
+                  ),
+                  title: Text(contact.name),
+                  subtitle: Text('${contact.number} - ${contact.relationship}'),
+                  trailing: Wrap(
+                    children: [
+                      IconButton(
+                        tooltip: 'Edit',
+                        onPressed: () => onEdit(contact),
+                        icon: const Icon(Icons.edit_outlined),
+                      ),
+                      IconButton(
+                        tooltip: 'Delete',
+                        onPressed: () => onDelete(contact),
+                        icon: const Icon(Icons.delete_outline),
+                      ),
+                    ],
+                  ),
+                );
+              },
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemCount: contacts.length,
             ),
-            leading: CircleAvatar(
-              backgroundColor: contact.priority
-                  ? const Color(0xFFFFE4E6)
-                  : const Color(0xFFE0F2FE),
-              child: Icon(
-                contact.priority ? Icons.star : Icons.person,
-                color: contact.priority
-                    ? const Color(0xFFD71920)
-                    : const Color(0xFF0369A1),
-              ),
-            ),
-            title: Text(contact.name),
-            subtitle: Text('${contact.number} • ${contact.relationship}'),
-            trailing: Wrap(
-              children: [
-                IconButton(
-                  tooltip: 'Edit',
-                  onPressed: () => onEdit(contact),
-                  icon: const Icon(Icons.edit_outlined),
-                ),
-                IconButton(
-                  tooltip: 'Delete',
-                  onPressed: () => onDelete(contact),
-                  icon: const Icon(Icons.delete_outline),
-                ),
-              ],
-            ),
-          );
-        },
-        separatorBuilder: (_, __) => const SizedBox(height: 10),
-        itemCount: contacts.length,
-      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: onAdd,
         icon: const Icon(Icons.add),
-        label: const Text('Add Contact'),
+        label: Text('Add ${type.agency} Contact'),
       ),
     );
   }

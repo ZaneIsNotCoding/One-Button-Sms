@@ -33,8 +33,8 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     await tester.pump();
 
-    expect(find.text('One Button SMS'), findsOneWidget);
+    expect(find.text('SOS'), findsWidgets);
+    expect(find.text('PNP'), findsOneWidget);
     expect(find.text('Login'), findsNothing);
-    expect(find.text('Home'), findsOneWidget);
   });
 }

@@ -211,6 +211,97 @@ class SmsLog {
   final String status;
 }
 
+class EmergencyTypeData {
+  const EmergencyTypeData({
+    required this.id,
+    required this.label,
+    required this.agency,
+    required this.description,
+    required this.icon,
+    required this.color,
+    required this.agencyContacts,
+    required this.messagePrefix,
+  });
+
+  final String id;
+  final String label;
+  final String agency;
+  final String description;
+  final IconData icon;
+  final Color color;
+  final List<EmergencyContact> agencyContacts;
+  final String messagePrefix;
+}
+
+const emergencyTypes = <EmergencyTypeData>[
+  EmergencyTypeData(
+    id: 'robbery',
+    label: 'Robbery / Crime',
+    agency: 'PNP',
+    description: 'Police assistance',
+    icon: Icons.local_police,
+    color: Color(0xFFD71920),
+    agencyContacts: [
+      EmergencyContact(
+        name: 'Philippine National Police',
+        number: '911',
+        relationship: 'PNP',
+        priority: true,
+      ),
+      EmergencyContact(
+        name: 'PNP Hotline',
+        number: '117',
+        relationship: 'PNP',
+        priority: true,
+      ),
+    ],
+    messagePrefix:
+        'SOS ROBBERY/CRIME ALERT! I am in danger and need police assistance immediately.',
+  ),
+  EmergencyTypeData(
+    id: 'fire',
+    label: 'Fire',
+    agency: 'BFP',
+    description: 'Fire emergency',
+    icon: Icons.local_fire_department,
+    color: Color(0xFFEA580C),
+    agencyContacts: [
+      EmergencyContact(
+        name: 'Bureau of Fire Protection',
+        number: '911',
+        relationship: 'BFP',
+        priority: true,
+      ),
+      EmergencyContact(
+        name: 'BFP Hotline',
+        number: '160',
+        relationship: 'BFP',
+        priority: true,
+      ),
+    ],
+    messagePrefix:
+        'SOS FIRE ALERT! There is a fire emergency at my location. Please send help immediately.',
+  ),
+  EmergencyTypeData(
+    id: 'assistance',
+    label: 'Need Help',
+    agency: 'Barangay / Rescue',
+    description: 'General emergency',
+    icon: Icons.support_agent,
+    color: Color(0xFF0369A1),
+    agencyContacts: [
+      EmergencyContact(
+        name: 'Emergency Hotline',
+        number: '911',
+        relationship: 'Responder',
+        priority: true,
+      ),
+    ],
+    messagePrefix:
+        'SOS HELP NEEDED! I need immediate assistance. Please send help.',
+  ),
+];
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
@@ -229,6 +320,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int selectedIndex = 0;
+  String selectedEmergencyId = emergencyTypes.first.id;
   bool includeLocation = true;
   late bool permissionsGranted;
   DeviceLocation? currentLocation;
@@ -269,13 +361,13 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final pages = [
       DashboardTab(
-        userName: widget.userName.isEmpty ? 'User' : widget.userName,
         contacts: contacts,
-        logs: logs,
-        message: emergencyMessage,
+        emergencyTypes: emergencyTypes,
+        selectedEmergencyId: selectedEmergencyId,
         includeLocation: includeLocation,
         currentLocation: currentLocation,
         permissionsGranted: permissionsGranted,
+        onEmergencySelected: (id) => setState(() => selectedEmergencyId = id),
         onSendAlert: confirmAlert,
         onRefreshLocation: refreshLocation,
       ),
@@ -304,7 +396,21 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('One Button SMS'),
+        title: const Text('SOS'),
+        backgroundColor: const Color(0xFFD71920),
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            tooltip: 'Contacts',
+            onPressed: () => setState(() => selectedIndex = 1),
+            icon: const Icon(Icons.group),
+          ),
+          IconButton(
+            tooltip: 'Message',
+            onPressed: () => setState(() => selectedIndex = 2),
+            icon: const Icon(Icons.settings),
+          ),
+        ],
       ),
       body: pages[selectedIndex],
       bottomNavigationBar: NavigationBar(
@@ -316,7 +422,7 @@ class _HomeScreenState extends State<HomeScreen> {
           NavigationDestination(
             icon: Icon(Icons.dashboard_outlined),
             selectedIcon: Icon(Icons.dashboard),
-            label: 'Home',
+            label: 'SOS',
           ),
           NavigationDestination(
             icon: Icon(Icons.contacts_outlined),
@@ -369,8 +475,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> confirmAlert() async {
     final messenger = ScaffoldMessenger.of(context);
+    final emergencyType = emergencyTypes.firstWhere(
+      (type) => type.id == selectedEmergencyId,
+      orElse: () => emergencyTypes.first,
+    );
+    final recipients = emergencyRecipients(emergencyType);
 
-    if (contacts.isEmpty) {
+    if (recipients.isEmpty) {
       messenger.showSnackBar(
         const SnackBar(content: Text('Add at least one emergency contact.')),
       );
@@ -380,9 +491,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Send emergency alert?'),
+        title: Text('Send ${emergencyType.agency} SOS?'),
         content: Text(
-          'This will send your emergency message to ${contacts.length} contacts.',
+          'This will send your location and alert message to ${recipients.length} recipient(s).',
         ),
         actions: [
           TextButton(
@@ -408,18 +519,16 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() => currentLocation = location);
     }
 
-    final message = includeLocation && location != null
-        ? '$emergencyMessage\nLocation: ${location.mapUrl}'
-        : emergencyMessage;
+    final message = buildSosMessage(emergencyType, location);
     final sentCount = await AppServices.sendSms(
-      recipients: contacts.map((contact) => contact.number).toList(),
+      recipients: recipients.map((contact) => contact.number).toList(),
       message: message,
     );
 
     if (!mounted) return;
 
     setState(() {
-      for (final contact in contacts) {
+      for (final contact in recipients) {
         logs.insert(
           0,
           SmsLog(
@@ -435,6 +544,33 @@ class _HomeScreenState extends State<HomeScreen> {
     messenger.showSnackBar(
       SnackBar(content: Text('Emergency alert sent to $sentCount contacts.')),
     );
+  }
+
+  List<EmergencyContact> emergencyRecipients(EmergencyTypeData emergencyType) {
+    final recipients = <EmergencyContact>[
+      ...emergencyType.agencyContacts,
+      ...contacts,
+    ];
+    final seen = <String>{};
+
+    return recipients.where((contact) {
+      final number = contact.number.trim();
+      if (number.isEmpty || seen.contains(number)) return false;
+      seen.add(number);
+      return true;
+    }).toList();
+  }
+
+  String buildSosMessage(
+      EmergencyTypeData emergencyType, DeviceLocation? location) {
+    final locationText = includeLocation && location != null
+        ? '\nLocation: ${location.mapUrl}'
+        : '';
+    final customText = emergencyMessage.trim().isEmpty
+        ? ''
+        : '\nMessage: ${emergencyMessage.trim()}';
+
+    return '${emergencyType.messagePrefix}$locationText$customText';
   }
 
   Future<void> editContact([EmergencyContact? existing]) async {
@@ -566,156 +702,229 @@ class _ContactDialogState extends State<ContactDialog> {
 class DashboardTab extends StatelessWidget {
   const DashboardTab({
     super.key,
-    required this.userName,
     required this.contacts,
-    required this.logs,
-    required this.message,
+    required this.emergencyTypes,
+    required this.selectedEmergencyId,
     required this.includeLocation,
     required this.currentLocation,
     required this.permissionsGranted,
+    required this.onEmergencySelected,
     required this.onSendAlert,
     required this.onRefreshLocation,
   });
 
-  final String userName;
   final List<EmergencyContact> contacts;
-  final List<SmsLog> logs;
-  final String message;
+  final List<EmergencyTypeData> emergencyTypes;
+  final String selectedEmergencyId;
   final bool includeLocation;
   final DeviceLocation? currentLocation;
   final bool permissionsGranted;
+  final ValueChanged<String> onEmergencySelected;
   final VoidCallback onSendAlert;
   final VoidCallback onRefreshLocation;
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(20),
+    final selectedEmergency = emergencyTypes.firstWhere(
+      (type) => type.id == selectedEmergencyId,
+      orElse: () => emergencyTypes.first,
+    );
+    final locationLabel = currentLocation == null
+        ? 'Location not ready'
+        : '${currentLocation!.latitude.toStringAsFixed(5)}, '
+            '${currentLocation!.longitude.toStringAsFixed(5)}';
+
+    return Column(
       children: [
-        Text(
-          'Welcome, $userName',
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-        ),
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+          child: Text(
+            'Activate SOS and panic alarm to alert emergency contacts',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: Colors.black54,
+                  fontWeight: FontWeight.w700,
+                ),
           ),
-          child: Column(
-            children: [
-              FilledButton(
-                onPressed: onSendAlert,
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFFD71920),
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size.fromHeight(132),
-                  shape: RoundedRectangleBorder(
+        ),
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: emergencyTypes.map((type) {
+              final selected = type.id == selectedEmergencyId;
+              return Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: InkWell(
                     borderRadius: BorderRadius.circular(8),
+                    onTap: () => onEmergencySelected(type.id),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: selected ? type.color : Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color:
+                              selected ? type.color : const Color(0xFFE2E8F0),
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          Icon(
+                            type.icon,
+                            color: selected ? Colors.white : type.color,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            type.agency,
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: selected ? Colors.white : Colors.black87,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-                child: const Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.warning_amber_rounded, size: 46),
-                    SizedBox(height: 10),
-                    Text(
-                      'SEND EMERGENCY ALERT',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0,
-                      ),
+              );
+            }).toList(),
+          ),
+        ),
+        Expanded(
+          child: Center(
+            child: GestureDetector(
+              onTap: onSendAlert,
+              child: Container(
+                width: 224,
+                height: 224,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFFF1F5F9),
+                  boxShadow: [
+                    BoxShadow(
+                      color: selectedEmergency.color.withValues(alpha: 0.22),
+                      blurRadius: 34,
+                      spreadRadius: 12,
                     ),
                   ],
                 ),
+                child: Center(
+                  child: Container(
+                    width: 176,
+                    height: 176,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: selectedEmergency.color,
+                    ),
+                    child: const Center(
+                      child: Text(
+                        'SOS',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 44,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ),
-              const SizedBox(height: 16),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
+          child: Column(
+            children: [
               Text(
-                includeLocation
-                    ? '$message\n${currentLocation == null ? 'Location not ready yet.' : 'Location: ${currentLocation!.mapUrl}'}'
-                    : message,
+                'Alerting: ${selectedEmergency.agency}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '${selectedEmergency.description} • ${contacts.length} saved contact(s)',
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium,
+                style: const TextStyle(color: Colors.black54),
               ),
               const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: onRefreshLocation,
-                icon: const Icon(Icons.my_location),
-                label: Text(
-                  permissionsGranted ? 'Refresh Location' : 'Allow Location',
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: onRefreshLocation,
+                      icon: const Icon(Icons.my_location),
+                      label: Text(
+                        permissionsGranted ? locationLabel : 'Allow Location',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
         ),
-        const SizedBox(height: 16),
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            StatTile(
-              icon: Icons.contacts,
-              label: 'Contacts',
-              value: '${contacts.length}',
-            ),
-            StatTile(
-              icon: Icons.priority_high,
-              label: 'Priority',
-              value: '${contacts.where((item) => item.priority).length}',
-            ),
-            StatTile(
-              icon: Icons.location_on_outlined,
-              label: 'GPS',
-              value: currentLocation == null ? 'Needed' : 'Ready',
-            ),
-          ],
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              const _QuickStatus(icon: Icons.sms_outlined, label: 'SMS'),
+              _QuickStatus(
+                icon: includeLocation
+                    ? Icons.location_on_outlined
+                    : Icons.location_off_outlined,
+                label: includeLocation ? 'GPS' : 'No GPS',
+              ),
+              const _QuickStatus(
+                icon: Icons.people_outline,
+                label: 'Contacts',
+              ),
+            ],
+          ),
         ),
       ],
     );
   }
 }
 
-class StatTile extends StatelessWidget {
-  const StatTile({
-    super.key,
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
+class _QuickStatus extends StatelessWidget {
+  const _QuickStatus({required this.icon, required this.label});
 
   final IconData icon;
   final String label;
-  final String value;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 160,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: Theme.of(context).colorScheme.primary),
-          const SizedBox(height: 12),
-          Text(label, style: const TextStyle(color: Colors.black54)),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: const Color(0xFFD71920), size: 22),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.black54,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

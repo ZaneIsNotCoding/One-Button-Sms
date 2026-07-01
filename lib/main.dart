@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 void main() {
   runApp(const OneButtonSmsApp());
@@ -20,7 +21,150 @@ class OneButtonSmsApp extends StatelessWidget {
         useMaterial3: true,
         scaffoldBackgroundColor: const Color(0xFFF8FAFC),
       ),
-      home: const HomeScreen(),
+      home: const StartupScreen(),
+    );
+  }
+}
+
+class DeviceLocation {
+  const DeviceLocation({required this.latitude, required this.longitude});
+
+  final double latitude;
+  final double longitude;
+
+  String get mapUrl => 'https://maps.google.com/?q=$latitude,$longitude';
+}
+
+class AppServices {
+  static const _channel = MethodChannel('one_button_sms/device');
+
+  static Future<bool> requestPermissions() async {
+    try {
+      final granted = await _channel.invokeMethod<bool>('requestPermissions');
+      return granted ?? false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
+  static Future<DeviceLocation?> getLocation() async {
+    try {
+      final result = await _channel.invokeMapMethod<String, dynamic>(
+        'getLocation',
+      );
+      if (result == null) return null;
+      return DeviceLocation(
+        latitude: (result['latitude'] as num).toDouble(),
+        longitude: (result['longitude'] as num).toDouble(),
+      );
+    } on PlatformException {
+      return null;
+    } on MissingPluginException {
+      return null;
+    }
+  }
+
+  static Future<int> sendSms({
+    required List<String> recipients,
+    required String message,
+  }) async {
+    try {
+      final sent = await _channel.invokeMethod<int>('sendSms', {
+        'recipients': recipients,
+        'message': message,
+      });
+      return sent ?? 0;
+    } on PlatformException {
+      return 0;
+    } on MissingPluginException {
+      return 0;
+    }
+  }
+}
+
+class StartupScreen extends StatefulWidget {
+  const StartupScreen({super.key});
+
+  @override
+  State<StartupScreen> createState() => _StartupScreenState();
+}
+
+class _StartupScreenState extends State<StartupScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController animationController;
+  String status = 'Preparing emergency tools...';
+
+  @override
+  void initState() {
+    super.initState();
+    animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
+    boot();
+  }
+
+  Future<void> boot() async {
+    await Future<void>.delayed(const Duration(milliseconds: 650));
+    if (!mounted) return;
+    setState(() => status = 'Requesting phone permissions...');
+
+    final permissionsGranted = await AppServices.requestPermissions();
+    final location =
+        permissionsGranted ? await AppServices.getLocation() : null;
+
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => HomeScreen(
+          permissionsGranted: permissionsGranted,
+          initialLocation: location,
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    animationController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: FadeTransition(
+          opacity: Tween<double>(begin: 0.45, end: 1).animate(
+            CurvedAnimation(
+              parent: animationController,
+              curve: Curves.easeInOut,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 96,
+                height: 96,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFD71920),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.emergency_share,
+                  color: Colors.white,
+                  size: 46,
+                ),
+              ),
+              const SizedBox(height: 22),
+              const CircularProgressIndicator(),
+              const SizedBox(height: 18),
+              Text(status, textAlign: TextAlign.center),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -68,9 +212,16 @@ class SmsLog {
 }
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, this.userName = 'User'});
+  const HomeScreen({
+    super.key,
+    this.userName = 'User',
+    this.permissionsGranted = false,
+    this.initialLocation,
+  });
 
   final String userName;
+  final bool permissionsGranted;
+  final DeviceLocation? initialLocation;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -79,6 +230,9 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int selectedIndex = 0;
   bool includeLocation = true;
+  late bool permissionsGranted;
+  DeviceLocation? currentLocation;
+  bool refreshingLocation = false;
   String emergencyMessage =
       'Emergency Alert! I need assistance. Please contact me immediately.';
 
@@ -102,14 +256,14 @@ class _HomeScreenState extends State<HomeScreen> {
     ),
   ];
 
-  final logs = <SmsLog>[
-    SmsLog(
-      receiver: 'Mother',
-      message: 'Emergency Alert',
-      sentAt: DateTime(2026, 6, 29, 20, 30),
-      status: 'Sent',
-    ),
-  ];
+  final logs = <SmsLog>[];
+
+  @override
+  void initState() {
+    super.initState();
+    permissionsGranted = widget.permissionsGranted;
+    currentLocation = widget.initialLocation;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -120,7 +274,10 @@ class _HomeScreenState extends State<HomeScreen> {
         logs: logs,
         message: emergencyMessage,
         includeLocation: includeLocation,
+        currentLocation: currentLocation,
+        permissionsGranted: permissionsGranted,
         onSendAlert: confirmAlert,
+        onRefreshLocation: refreshLocation,
       ),
       ContactsTab(
         contacts: contacts,
@@ -137,7 +294,12 @@ class _HomeScreenState extends State<HomeScreen> {
         onLocationChanged: (value) => setState(() => includeLocation = value),
       ),
       HistoryTab(logs: logs),
-      AdminTab(users: 12, alertsToday: logs.length, contacts: contacts.length),
+      LocationTab(
+        location: currentLocation,
+        permissionsGranted: permissionsGranted,
+        refreshing: refreshingLocation,
+        onRefresh: refreshLocation,
+      ),
     ];
 
     return Scaffold(
@@ -172,13 +334,37 @@ class _HomeScreenState extends State<HomeScreen> {
             label: 'Logs',
           ),
           NavigationDestination(
-            icon: Icon(Icons.admin_panel_settings_outlined),
-            selectedIcon: Icon(Icons.admin_panel_settings),
-            label: 'Admin',
+            icon: Icon(Icons.map_outlined),
+            selectedIcon: Icon(Icons.map),
+            label: 'Map',
           ),
         ],
       ),
     );
+  }
+
+  Future<void> refreshLocation() async {
+    if (refreshingLocation) return;
+    setState(() => refreshingLocation = true);
+
+    var granted = permissionsGranted;
+    if (!granted) {
+      granted = await AppServices.requestPermissions();
+    }
+    final location = granted ? await AppServices.getLocation() : null;
+
+    if (!mounted) return;
+    setState(() {
+      permissionsGranted = granted;
+      currentLocation = location ?? currentLocation;
+      refreshingLocation = false;
+    });
+
+    final message = location == null
+        ? 'Location unavailable. Turn on GPS and allow location permission.'
+        : 'Location updated.';
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> confirmAlert() async {
@@ -215,9 +401,22 @@ class _HomeScreenState extends State<HomeScreen> {
     if (confirmed != true) return;
     if (!mounted) return;
 
-    final message = includeLocation
-        ? '$emergencyMessage\nLocation: https://maps.google.com/?q=14.5995,120.9842'
+    DeviceLocation? location = currentLocation;
+    if (includeLocation) {
+      location = await AppServices.getLocation() ?? currentLocation;
+      if (!mounted) return;
+      setState(() => currentLocation = location);
+    }
+
+    final message = includeLocation && location != null
+        ? '$emergencyMessage\nLocation: ${location.mapUrl}'
         : emergencyMessage;
+    final sentCount = await AppServices.sendSms(
+      recipients: contacts.map((contact) => contact.number).toList(),
+      message: message,
+    );
+
+    if (!mounted) return;
 
     setState(() {
       for (final contact in contacts) {
@@ -227,16 +426,14 @@ class _HomeScreenState extends State<HomeScreen> {
             receiver: contact.name,
             message: message,
             sentAt: DateTime.now(),
-            status: 'Sent',
+            status: sentCount > 0 ? 'Sent' : 'Failed',
           ),
         );
       }
     });
 
     messenger.showSnackBar(
-      SnackBar(
-          content:
-              Text('Emergency alert sent to ${contacts.length} contacts.')),
+      SnackBar(content: Text('Emergency alert sent to $sentCount contacts.')),
     );
   }
 
@@ -374,7 +571,10 @@ class DashboardTab extends StatelessWidget {
     required this.logs,
     required this.message,
     required this.includeLocation,
+    required this.currentLocation,
+    required this.permissionsGranted,
     required this.onSendAlert,
+    required this.onRefreshLocation,
   });
 
   final String userName;
@@ -382,7 +582,10 @@ class DashboardTab extends StatelessWidget {
   final List<SmsLog> logs;
   final String message;
   final bool includeLocation;
+  final DeviceLocation? currentLocation;
+  final bool permissionsGranted;
   final VoidCallback onSendAlert;
+  final VoidCallback onRefreshLocation;
 
   @override
   Widget build(BuildContext context) {
@@ -435,10 +638,18 @@ class DashboardTab extends StatelessWidget {
               const SizedBox(height: 16),
               Text(
                 includeLocation
-                    ? '$message\nLocation link will be included.'
+                    ? '$message\n${currentLocation == null ? 'Location not ready yet.' : 'Location: ${currentLocation!.mapUrl}'}'
                     : message,
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: onRefreshLocation,
+                icon: const Icon(Icons.my_location),
+                label: Text(
+                  permissionsGranted ? 'Refresh Location' : 'Allow Location',
+                ),
               ),
             ],
           ),
@@ -459,9 +670,9 @@ class DashboardTab extends StatelessWidget {
               value: '${contacts.where((item) => item.priority).length}',
             ),
             StatTile(
-              icon: Icons.history,
-              label: 'Last Alert',
-              value: logs.isEmpty ? 'None' : formatDateTime(logs.first.sentAt),
+              icon: Icons.location_on_outlined,
+              label: 'GPS',
+              value: currentLocation == null ? 'Needed' : 'Ready',
             ),
           ],
         ),
@@ -677,72 +888,87 @@ class HistoryTab extends StatelessWidget {
   }
 }
 
-class AdminTab extends StatelessWidget {
-  const AdminTab({
+class LocationTab extends StatelessWidget {
+  const LocationTab({
     super.key,
-    required this.users,
-    required this.alertsToday,
-    required this.contacts,
+    required this.location,
+    required this.permissionsGranted,
+    required this.refreshing,
+    required this.onRefresh,
   });
 
-  final int users;
-  final int alertsToday;
-  final int contacts;
+  final DeviceLocation? location;
+  final bool permissionsGranted;
+  final bool refreshing;
+  final VoidCallback onRefresh;
 
   @override
   Widget build(BuildContext context) {
+    final mapUrl = location?.mapUrl;
+
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
         Text(
-          'Admin Dashboard',
+          'Map Location',
           style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w800,
               ),
         ),
         const SizedBox(height: 14),
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            StatTile(
-                icon: Icons.group_outlined, label: 'Users', value: '$users'),
-            StatTile(
-              icon: Icons.notification_important_outlined,
-              label: 'Alerts Today',
-              value: '$alertsToday',
-            ),
-            StatTile(
-              icon: Icons.contact_phone_outlined,
-              label: 'Contacts',
-              value: '$contacts',
-            ),
-          ],
-        ),
-        const SizedBox(height: 20),
-        ListTile(
-          tileColor: Colors.white,
-          shape: RoundedRectangleBorder(
+        Container(
+          height: 220,
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: const Color(0xFFE0F2FE),
             borderRadius: BorderRadius.circular(8),
-            side: const BorderSide(color: Color(0xFFE2E8F0)),
+            border: Border.all(color: const Color(0xFFBAE6FD)),
           ),
-          leading: const Icon(Icons.manage_accounts_outlined),
-          title: const Text('Manage users'),
-          subtitle: const Text('Organization accounts and access control'),
-          trailing: const Icon(Icons.chevron_right),
-        ),
-        const SizedBox(height: 10),
-        ListTile(
-          tileColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-            side: const BorderSide(color: Color(0xFFE2E8F0)),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.map, size: 58, color: Color(0xFF0369A1)),
+              const SizedBox(height: 12),
+              Text(
+                mapUrl ?? 'GPS location has not been captured yet.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                permissionsGranted
+                    ? 'This location is used in emergency SMS messages.'
+                    : 'Allow location permission to attach your real position.',
+                textAlign: TextAlign.center,
+              ),
+            ],
           ),
-          leading: const Icon(Icons.analytics_outlined),
-          title: const Text('SMS activity'),
-          subtitle: const Text('Monitor sent alerts and delivery status'),
-          trailing: const Icon(Icons.chevron_right),
         ),
+        const SizedBox(height: 16),
+        FilledButton.icon(
+          onPressed: refreshing ? null : onRefresh,
+          icon: refreshing
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.my_location),
+          label: Text(refreshing ? 'Finding Location...' : 'Update Location'),
+        ),
+        if (location != null) ...[
+          const SizedBox(height: 14),
+          ListTile(
+            tileColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+              side: const BorderSide(color: Color(0xFFE2E8F0)),
+            ),
+            leading: const Icon(Icons.place_outlined),
+            title: const Text('Coordinates'),
+            subtitle: Text('${location!.latitude}, ${location!.longitude}'),
+          ),
+        ],
       ],
     );
   }

@@ -20,7 +20,7 @@ class OneButtonSmsApp extends StatelessWidget {
         useMaterial3: true,
         scaffoldBackgroundColor: const Color(0xFFF8FAFC),
       ),
-      home: const AuthScreen(),
+      home: const HomeScreen(),
     );
   }
 }
@@ -67,136 +67,8 @@ class SmsLog {
   final String status;
 }
 
-class AuthScreen extends StatefulWidget {
-  const AuthScreen({super.key});
-
-  @override
-  State<AuthScreen> createState() => _AuthScreenState();
-}
-
-class _AuthScreenState extends State<AuthScreen> {
-  bool isRegistering = false;
-  final emailController = TextEditingController(text: 'user@example.com');
-  final passwordController = TextEditingController(text: 'password');
-  final nameController = TextEditingController(text: 'Arnie');
-
-  @override
-  void dispose() {
-    emailController.dispose();
-    passwordController.dispose();
-    nameController.dispose();
-    super.dispose();
-  }
-
-  void enterApp() {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => HomeScreen(userName: nameController.text.trim()),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 440),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Icon(
-                    Icons.emergency_share,
-                    size: 72,
-                    color: Color(0xFFD71920),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'One Button SMS',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Emergency alerts in one fast action',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: Colors.black54,
-                        ),
-                  ),
-                  const SizedBox(height: 32),
-                  if (isRegistering) ...[
-                    TextField(
-                      controller: nameController,
-                      textInputAction: TextInputAction.next,
-                      decoration: const InputDecoration(
-                        labelText: 'Name',
-                        prefixIcon: Icon(Icons.person_outline),
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                  ],
-                  TextField(
-                    controller: emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(
-                      labelText: 'Email',
-                      prefixIcon: Icon(Icons.mail_outline),
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: passwordController,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Password',
-                      prefixIcon: Icon(Icons.lock_outline),
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  FilledButton.icon(
-                    onPressed: enterApp,
-                    icon: Icon(isRegistering ? Icons.person_add : Icons.login),
-                    label: Text(isRegistering ? 'Create Account' : 'Login'),
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      setState(() => isRegistering = !isRegistering);
-                    },
-                    child: Text(
-                      isRegistering
-                          ? 'Already have an account? Login'
-                          : 'Need an account? Register',
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () {},
-                    child: const Text('Forgot password?'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.userName});
+  const HomeScreen({super.key, this.userName = 'User'});
 
   final String userName;
 
@@ -271,17 +143,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('One Button SMS'),
-        actions: [
-          IconButton(
-            tooltip: 'Logout',
-            onPressed: () {
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (_) => const AuthScreen()),
-              );
-            },
-            icon: const Icon(Icons.logout),
-          ),
-        ],
       ),
       body: pages[selectedIndex],
       bottomNavigationBar: NavigationBar(
@@ -371,13 +232,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Emergency alert sent to ${contacts.length} contacts.')),
+      SnackBar(
+          content:
+              Text('Emergency alert sent to ${contacts.length} contacts.')),
     );
   }
 
   Future<void> editContact([EmergencyContact? existing]) async {
     final nameController = TextEditingController(text: existing?.name ?? '');
-    final numberController = TextEditingController(text: existing?.number ?? '');
+    final numberController =
+        TextEditingController(text: existing?.number ?? '');
     final relationshipController =
         TextEditingController(text: existing?.relationship ?? '');
     var priority = existing?.priority ?? false;
@@ -806,7 +670,8 @@ class AdminTab extends StatelessWidget {
           spacing: 12,
           runSpacing: 12,
           children: [
-            StatTile(icon: Icons.group_outlined, label: 'Users', value: '$users'),
+            StatTile(
+                icon: Icons.group_outlined, label: 'Users', value: '$users'),
             StatTile(
               icon: Icons.notification_important_outlined,
               label: 'Alerts Today',

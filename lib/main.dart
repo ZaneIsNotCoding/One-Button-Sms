@@ -182,8 +182,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> confirmAlert() async {
+    final messenger = ScaffoldMessenger.of(context);
+
     if (contacts.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         const SnackBar(content: Text('Add at least one emergency contact.')),
       );
       return;
@@ -211,6 +213,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     if (confirmed != true) return;
+    if (!mounted) return;
 
     final message = includeLocation
         ? '$emergencyMessage\nLocation: https://maps.google.com/?q=14.5995,120.9842'
@@ -230,8 +233,7 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     });
 
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+    messenger.showSnackBar(
       SnackBar(
           content:
               Text('Emergency alert sent to ${contacts.length} contacts.')),
@@ -239,95 +241,128 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> editContact([EmergencyContact? existing]) async {
-    final nameController = TextEditingController(text: existing?.name ?? '');
-    final numberController =
-        TextEditingController(text: existing?.number ?? '');
-    final relationshipController =
-        TextEditingController(text: existing?.relationship ?? '');
-    var priority = existing?.priority ?? false;
-
     final saved = await showDialog<EmergencyContact>(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(existing == null ? 'Add Contact' : 'Edit Contact'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Contact name',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: numberController,
-                  keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(
-                    labelText: 'Phone number',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: relationshipController,
-                  decoration: const InputDecoration(
-                    labelText: 'Relationship',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Priority contact'),
-                  value: priority,
-                  onChanged: (value) {
-                    setDialogState(() => priority = value);
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.pop(
-                  context,
-                  EmergencyContact(
-                    name: nameController.text.trim(),
-                    number: numberController.text.trim(),
-                    relationship: relationshipController.text.trim(),
-                    priority: priority,
-                  ),
-                );
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
+      builder: (context) => ContactDialog(existing: existing),
     );
 
-    nameController.dispose();
-    numberController.dispose();
-    relationshipController.dispose();
-
     if (saved == null || saved.name.isEmpty || saved.number.isEmpty) return;
+    if (!mounted) return;
 
     setState(() {
       if (existing == null) {
         contacts.add(saved);
       } else {
         final index = contacts.indexOf(existing);
-        contacts[index] = saved;
+        if (index != -1) {
+          contacts[index] = saved;
+        }
       }
     });
+  }
+}
+
+class ContactDialog extends StatefulWidget {
+  const ContactDialog({super.key, this.existing});
+
+  final EmergencyContact? existing;
+
+  @override
+  State<ContactDialog> createState() => _ContactDialogState();
+}
+
+class _ContactDialogState extends State<ContactDialog> {
+  late final TextEditingController nameController;
+  late final TextEditingController numberController;
+  late final TextEditingController relationshipController;
+  late bool priority;
+
+  @override
+  void initState() {
+    super.initState();
+    final existing = widget.existing;
+    nameController = TextEditingController(text: existing?.name ?? '');
+    numberController = TextEditingController(text: existing?.number ?? '');
+    relationshipController = TextEditingController(
+      text: existing?.relationship ?? '',
+    );
+    priority = existing?.priority ?? false;
+  }
+
+  @override
+  void dispose() {
+    nameController.dispose();
+    numberController.dispose();
+    relationshipController.dispose();
+    super.dispose();
+  }
+
+  void save() {
+    Navigator.pop(
+      context,
+      EmergencyContact(
+        name: nameController.text.trim(),
+        number: numberController.text.trim(),
+        relationship: relationshipController.text.trim(),
+        priority: priority,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.existing == null ? 'Add Contact' : 'Edit Contact'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(
+                labelText: 'Contact name',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: numberController,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'Phone number',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: relationshipController,
+              decoration: const InputDecoration(
+                labelText: 'Relationship',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Priority contact'),
+              value: priority,
+              onChanged: (value) {
+                setState(() => priority = value);
+              },
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: save,
+          child: const Text('Save'),
+        ),
+      ],
+    );
   }
 }
 

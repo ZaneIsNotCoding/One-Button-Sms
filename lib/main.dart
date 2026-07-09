@@ -13,286 +13,82 @@ class OneButtonSmsApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'One Button SMS',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFD71920),
-          brightness: Brightness.light,
-        ),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
         useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFFF8FAFC),
       ),
-      home: const AuthScreen(),
+      home: const HomeScreen(),
     );
   }
 }
 
 class EmergencyContact {
-  const EmergencyContact({
-    required this.name,
-    required this.number,
-    required this.relationship,
-    this.priority = false,
-  });
+  const EmergencyContact({required this.name, required this.phone});
 
   final String name;
-  final String number;
-  final String relationship;
-  final bool priority;
-
-  EmergencyContact copyWith({
-    String? name,
-    String? number,
-    String? relationship,
-    bool? priority,
-  }) {
-    return EmergencyContact(
-      name: name ?? this.name,
-      number: number ?? this.number,
-      relationship: relationship ?? this.relationship,
-      priority: priority ?? this.priority,
-    );
-  }
-}
-
-class SmsLog {
-  const SmsLog({
-    required this.receiver,
-    required this.message,
-    required this.sentAt,
-    required this.status,
-  });
-
-  final String receiver;
-  final String message;
-  final DateTime sentAt;
-  final String status;
-}
-
-class AuthScreen extends StatefulWidget {
-  const AuthScreen({super.key});
-
-  @override
-  State<AuthScreen> createState() => _AuthScreenState();
-}
-
-class _AuthScreenState extends State<AuthScreen> {
-  bool isRegistering = false;
-  final emailController = TextEditingController(text: 'user@example.com');
-  final passwordController = TextEditingController(text: 'password');
-  final nameController = TextEditingController(text: 'Arnie');
-
-  @override
-  void dispose() {
-    emailController.dispose();
-    passwordController.dispose();
-    nameController.dispose();
-    super.dispose();
-  }
-
-  void enterApp() {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => HomeScreen(userName: nameController.text.trim()),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 440),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Icon(
-                    Icons.emergency_share,
-                    size: 72,
-                    color: Color(0xFFD71920),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'One Button SMS',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Emergency alerts in one fast action',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: Colors.black54,
-                        ),
-                  ),
-                  const SizedBox(height: 32),
-                  if (isRegistering) ...[
-                    TextField(
-                      controller: nameController,
-                      textInputAction: TextInputAction.next,
-                      decoration: const InputDecoration(
-                        labelText: 'Name',
-                        prefixIcon: Icon(Icons.person_outline),
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                  ],
-                  TextField(
-                    controller: emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(
-                      labelText: 'Email',
-                      prefixIcon: Icon(Icons.mail_outline),
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: passwordController,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Password',
-                      prefixIcon: Icon(Icons.lock_outline),
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  FilledButton.icon(
-                    onPressed: enterApp,
-                    icon: Icon(isRegistering ? Icons.person_add : Icons.login),
-                    label: Text(isRegistering ? 'Create Account' : 'Login'),
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      setState(() => isRegistering = !isRegistering);
-                    },
-                    child: Text(
-                      isRegistering
-                          ? 'Already have an account? Login'
-                          : 'Need an account? Register',
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () {},
-                    child: const Text('Forgot password?'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  final String phone;
 }
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.userName});
-
-  final String userName;
+  const HomeScreen({super.key});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int selectedIndex = 0;
-  bool includeLocation = true;
-  String emergencyMessage =
-      'Emergency Alert! I need assistance. Please contact me immediately.';
+  final List<EmergencyContact> _contacts = [];
+  int _selectedPage = 0;
+  String _status = 'Ready to send';
 
-  final contacts = <EmergencyContact>[
-    const EmergencyContact(
-      name: 'Mother',
-      number: '09123456789',
-      relationship: 'Family',
-      priority: true,
-    ),
-    const EmergencyContact(
-      name: 'Brother',
-      number: '09987654321',
-      relationship: 'Family',
-      priority: true,
-    ),
-    const EmergencyContact(
-      name: 'Security',
-      number: '09111111111',
-      relationship: 'Responder',
-    ),
-  ];
+  void _sendMessage() {
+    setState(() {
+      _status = 'SMS sending is not connected yet';
+    });
+  }
 
-  final logs = <SmsLog>[
-    SmsLog(
-      receiver: 'Mother',
-      message: 'Emergency Alert',
-      sentAt: DateTime(2026, 6, 29, 20, 30),
-      status: 'Sent',
-    ),
-  ];
+  void _sendToAddedContacts() {
+    setState(() {
+      if (_contacts.isEmpty) {
+        _status = 'Add a contact before using Contact SOS';
+        _selectedPage = 1;
+        return;
+      }
+
+      _status = 'Contact SOS ready for ${_contacts.length} contact(s)';
+    });
+  }
+
+  void _addContact(EmergencyContact contact) {
+    setState(() {
+      _contacts.add(contact);
+      _status = 'Added ${contact.name}';
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final pages = [
-      DashboardTab(
-        userName: widget.userName.isEmpty ? 'User' : widget.userName,
-        contacts: contacts,
-        logs: logs,
-        message: emergencyMessage,
-        includeLocation: includeLocation,
-        onSendAlert: confirmAlert,
+      SmsHomePage(
+        status: _status,
+        contactCount: _contacts.length,
+        onSendMessage: _sendMessage,
+        onSendToContacts: _sendToAddedContacts,
       ),
-      ContactsTab(
-        contacts: contacts,
-        onAdd: () => editContact(),
-        onEdit: editContact,
-        onDelete: (contact) {
-          setState(() => contacts.remove(contact));
-        },
-      ),
-      MessageTab(
-        message: emergencyMessage,
-        includeLocation: includeLocation,
-        onChanged: (value) => setState(() => emergencyMessage = value),
-        onLocationChanged: (value) => setState(() => includeLocation = value),
-      ),
-      HistoryTab(logs: logs),
-      AdminTab(users: 12, alertsToday: logs.length, contacts: contacts.length),
+      ContactsPage(contacts: _contacts, onAddContact: _addContact),
     ];
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('One Button SMS'),
-        actions: [
-          IconButton(
-            tooltip: 'Logout',
-            onPressed: () {
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (_) => const AuthScreen()),
-              );
-            },
-            icon: const Icon(Icons.logout),
-          ),
-        ],
-      ),
-      body: pages[selectedIndex],
+      appBar: AppBar(title: const Text('One Button SMS'), centerTitle: true),
+      body: pages[_selectedPage],
       bottomNavigationBar: NavigationBar(
-        selectedIndex: selectedIndex,
+        selectedIndex: _selectedPage,
         onDestinationSelected: (index) {
-          setState(() => selectedIndex = index);
+          setState(() => _selectedPage = index);
         },
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard),
+            icon: Icon(Icons.sms_outlined),
+            selectedIcon: Icon(Icons.sms),
             label: 'Home',
           ),
           NavigationDestination(
@@ -300,583 +96,200 @@ class _HomeScreenState extends State<HomeScreen> {
             selectedIcon: Icon(Icons.contacts),
             label: 'Contacts',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.message_outlined),
-            selectedIcon: Icon(Icons.message),
-            label: 'Message',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.history_outlined),
-            selectedIcon: Icon(Icons.history),
-            label: 'Logs',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.admin_panel_settings_outlined),
-            selectedIcon: Icon(Icons.admin_panel_settings),
-            label: 'Admin',
-          ),
         ],
       ),
     );
-  }
-
-  Future<void> confirmAlert() async {
-    if (contacts.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Add at least one emergency contact.')),
-      );
-      return;
-    }
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Send emergency alert?'),
-        content: Text(
-          'This will send your emergency message to ${contacts.length} contacts.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton.icon(
-            onPressed: () => Navigator.pop(context, true),
-            icon: const Icon(Icons.sms),
-            label: const Text('Send Alert'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-
-    final message = includeLocation
-        ? '$emergencyMessage\nLocation: https://maps.google.com/?q=14.5995,120.9842'
-        : emergencyMessage;
-
-    setState(() {
-      for (final contact in contacts) {
-        logs.insert(
-          0,
-          SmsLog(
-            receiver: contact.name,
-            message: message,
-            sentAt: DateTime.now(),
-            status: 'Sent',
-          ),
-        );
-      }
-    });
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Emergency alert sent to ${contacts.length} contacts.')),
-    );
-  }
-
-  Future<void> editContact([EmergencyContact? existing]) async {
-    final nameController = TextEditingController(text: existing?.name ?? '');
-    final numberController = TextEditingController(text: existing?.number ?? '');
-    final relationshipController =
-        TextEditingController(text: existing?.relationship ?? '');
-    var priority = existing?.priority ?? false;
-
-    final saved = await showDialog<EmergencyContact>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(existing == null ? 'Add Contact' : 'Edit Contact'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Contact name',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: numberController,
-                  keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(
-                    labelText: 'Phone number',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: relationshipController,
-                  decoration: const InputDecoration(
-                    labelText: 'Relationship',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Priority contact'),
-                  value: priority,
-                  onChanged: (value) {
-                    setDialogState(() => priority = value);
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.pop(
-                  context,
-                  EmergencyContact(
-                    name: nameController.text.trim(),
-                    number: numberController.text.trim(),
-                    relationship: relationshipController.text.trim(),
-                    priority: priority,
-                  ),
-                );
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    nameController.dispose();
-    numberController.dispose();
-    relationshipController.dispose();
-
-    if (saved == null || saved.name.isEmpty || saved.number.isEmpty) return;
-
-    setState(() {
-      if (existing == null) {
-        contacts.add(saved);
-      } else {
-        final index = contacts.indexOf(existing);
-        if (index != -1) {
-          contacts[index] = saved;
-        }
-      }
-    });
   }
 }
 
-class DashboardTab extends StatelessWidget {
-  const DashboardTab({
+class SmsHomePage extends StatelessWidget {
+  const SmsHomePage({
     super.key,
-    required this.userName,
-    required this.contacts,
-    required this.logs,
-    required this.message,
-    required this.includeLocation,
-    required this.onSendAlert,
+    required this.status,
+    required this.contactCount,
+    required this.onSendMessage,
+    required this.onSendToContacts,
   });
 
-  final String userName;
-  final List<EmergencyContact> contacts;
-  final List<SmsLog> logs;
-  final String message;
-  final bool includeLocation;
-  final VoidCallback onSendAlert;
+  final String status;
+  final int contactCount;
+  final VoidCallback onSendMessage;
+  final VoidCallback onSendToContacts;
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        Text(
-          'Welcome, $userName',
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-        ),
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
-          ),
-          child: Column(
-            children: [
-              FilledButton(
-                onPressed: onSendAlert,
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFFD71920),
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size.fromHeight(132),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: const Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.warning_amber_rounded, size: 46),
-                    SizedBox(height: 10),
-                    Text(
-                      'SEND EMERGENCY ALERT',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                includeLocation
-                    ? '$message\nLocation link will be included.'
-                    : message,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
+    final colors = Theme.of(context).colorScheme;
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            StatTile(
-              icon: Icons.contacts,
-              label: 'Contacts',
-              value: '${contacts.length}',
+            Icon(Icons.sms_outlined, size: 72, color: colors.primary),
+            const SizedBox(height: 24),
+            Text(
+              'Send your preset SMS with one tap.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.headlineSmall,
             ),
-            StatTile(
-              icon: Icons.priority_high,
-              label: 'Priority',
-              value: '${contacts.where((item) => item.priority).length}',
+            const SizedBox(height: 12),
+            Text(
+              status,
+              textAlign: TextAlign.center,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyLarge?.copyWith(color: colors.onSurfaceVariant),
             ),
-            StatTile(
-              icon: Icons.history,
-              label: 'Last Alert',
-              value: logs.isEmpty ? 'None' : formatDateTime(logs.first.sentAt),
+            const SizedBox(height: 8),
+            Text(
+              '$contactCount added contact(s)',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 36),
+            FilledButton.icon(
+              onPressed: onSendMessage,
+              icon: const Icon(Icons.send),
+              label: const Text('Send SMS'),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(56),
+                textStyle: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.tonalIcon(
+              onPressed: onSendToContacts,
+              icon: const Icon(Icons.emergency_share),
+              label: const Text('Contact SOS'),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(56),
+                textStyle: Theme.of(context).textTheme.titleMedium,
+              ),
             ),
           ],
         ),
-      ],
-    );
-  }
-}
-
-class StatTile extends StatelessWidget {
-  const StatTile({
-    super.key,
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 160,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: Theme.of(context).colorScheme.primary),
-          const SizedBox(height: 12),
-          Text(label, style: const TextStyle(color: Colors.black54)),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-          ),
-        ],
       ),
     );
   }
 }
 
-class ContactsTab extends StatelessWidget {
-  const ContactsTab({
+class ContactsPage extends StatelessWidget {
+  const ContactsPage({
     super.key,
     required this.contacts,
-    required this.onAdd,
-    required this.onEdit,
-    required this.onDelete,
+    required this.onAddContact,
   });
 
   final List<EmergencyContact> contacts;
-  final VoidCallback onAdd;
-  final ValueChanged<EmergencyContact> onEdit;
-  final ValueChanged<EmergencyContact> onDelete;
+  final ValueChanged<EmergencyContact> onAddContact;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: ListView.separated(
-        padding: const EdgeInsets.all(20),
-        itemBuilder: (context, index) {
-          final contact = contacts[index];
-          return ListTile(
-            tileColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-              side: const BorderSide(color: Color(0xFFE2E8F0)),
-            ),
-            leading: CircleAvatar(
-              backgroundColor: contact.priority
-                  ? const Color(0xFFFFE4E6)
-                  : const Color(0xFFE0F2FE),
-              child: Icon(
-                contact.priority ? Icons.star : Icons.person,
-                color: contact.priority
-                    ? const Color(0xFFD71920)
-                    : const Color(0xFF0369A1),
+      body: SafeArea(
+        child: contacts.isEmpty
+            ? const Center(child: Text('No contacts added yet.'))
+            : ListView.separated(
+                padding: const EdgeInsets.all(16),
+                itemCount: contacts.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 8),
+                itemBuilder: (context, index) {
+                  final contact = contacts[index];
+                  return ListTile(
+                    leading: const Icon(Icons.person_outline),
+                    title: Text(contact.name),
+                    subtitle: Text(contact.phone),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  );
+                },
               ),
-            ),
-            title: Text(contact.name),
-            subtitle: Text('${contact.number} - ${contact.relationship}'),
-            trailing: SizedBox(
-              width: 96,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    tooltip: 'Edit',
-                    onPressed: () => onEdit(contact),
-                    icon: const Icon(Icons.edit_outlined),
-                  ),
-                  IconButton(
-                    tooltip: 'Delete',
-                    onPressed: () => onDelete(contact),
-                    icon: const Icon(Icons.delete_outline),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-        separatorBuilder: (_, __) => const SizedBox(height: 10),
-        itemCount: contacts.length,
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: onAdd,
+        onPressed: () => _showAddContactDialog(context),
         icon: const Icon(Icons.add),
         label: const Text('Add Contact'),
       ),
     );
   }
-}
 
-class MessageTab extends StatelessWidget {
-  const MessageTab({
-    super.key,
-    required this.message,
-    required this.includeLocation,
-    required this.onChanged,
-    required this.onLocationChanged,
-  });
-
-  final String message;
-  final bool includeLocation;
-  final ValueChanged<String> onChanged;
-  final ValueChanged<bool> onLocationChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        Text(
-          'Emergency Message',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-        ),
-        const SizedBox(height: 12),
-        TextFormField(
-          initialValue: message,
-          maxLines: 6,
-          onChanged: onChanged,
-          decoration: const InputDecoration(
-            labelText: 'Message content',
-            alignLabelWithHint: true,
-            border: OutlineInputBorder(),
-          ),
-        ),
-        const SizedBox(height: 12),
-        SwitchListTile(
-          tileColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-            side: const BorderSide(color: Color(0xFFE2E8F0)),
-          ),
-          title: const Text('Include location link'),
-          subtitle: const Text('Adds a map link to the emergency SMS.'),
-          value: includeLocation,
-          onChanged: onLocationChanged,
-        ),
-        const SizedBox(height: 18),
-        FilledButton.icon(
-          onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Message saved.')),
-            );
-          },
-          icon: const Icon(Icons.save_outlined),
-          label: const Text('Save Message'),
-        ),
-      ],
+  Future<void> _showAddContactDialog(BuildContext context) async {
+    final contact = await showDialog<EmergencyContact>(
+      context: context,
+      builder: (context) => const AddContactDialog(),
     );
+
+    if (contact != null) {
+      onAddContact(contact);
+    }
   }
 }
 
-class HistoryTab extends StatelessWidget {
-  const HistoryTab({super.key, required this.logs});
-
-  final List<SmsLog> logs;
+class AddContactDialog extends StatefulWidget {
+  const AddContactDialog({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    if (logs.isEmpty) {
-      return const Center(child: Text('No emergency alerts sent yet.'));
+  State<AddContactDialog> createState() => _AddContactDialogState();
+}
+
+class _AddContactDialogState extends State<AddContactDialog> {
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final name = _nameController.text.trim();
+    final phone = _phoneController.text.trim();
+
+    if (name.isEmpty || phone.isEmpty) {
+      return;
     }
 
-    return ListView.separated(
-      padding: const EdgeInsets.all(20),
-      itemBuilder: (context, index) {
-        final log = logs[index];
-        return ListTile(
-          tileColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-            side: const BorderSide(color: Color(0xFFE2E8F0)),
-          ),
-          leading: const Icon(Icons.sms_outlined),
-          title: Text(log.receiver),
-          subtitle: Text('${formatDateTime(log.sentAt)}\n${log.message}'),
-          isThreeLine: true,
-          trailing: Chip(
-            label: Text(log.status),
-            avatar: const Icon(Icons.check_circle, size: 18),
-          ),
-        );
-      },
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemCount: logs.length,
-    );
+    Navigator.pop(context, EmergencyContact(name: name, phone: phone));
   }
-}
-
-class AdminTab extends StatelessWidget {
-  const AdminTab({
-    super.key,
-    required this.users,
-    required this.alertsToday,
-    required this.contacts,
-  });
-
-  final int users;
-  final int alertsToday;
-  final int contacts;
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        Text(
-          'Admin Dashboard',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-        ),
-        const SizedBox(height: 14),
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            StatTile(icon: Icons.group_outlined, label: 'Users', value: '$users'),
-            StatTile(
-              icon: Icons.notification_important_outlined,
-              label: 'Alerts Today',
-              value: '$alertsToday',
+    return AlertDialog(
+      title: const Text('Add Contact'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _nameController,
+            textInputAction: TextInputAction.next,
+            decoration: const InputDecoration(
+              labelText: 'Name',
+              border: OutlineInputBorder(),
             ),
-            StatTile(
-              icon: Icons.contact_phone_outlined,
-              label: 'Contacts',
-              value: '$contacts',
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _phoneController,
+            keyboardType: TextInputType.phone,
+            decoration: const InputDecoration(
+              labelText: 'Phone number',
+              border: OutlineInputBorder(),
             ),
-          ],
-        ),
-        const SizedBox(height: 20),
-        ListTile(
-          tileColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-            side: const BorderSide(color: Color(0xFFE2E8F0)),
           ),
-          leading: const Icon(Icons.manage_accounts_outlined),
-          title: const Text('Manage users'),
-          subtitle: const Text('Organization accounts and access control'),
-          trailing: const Icon(Icons.chevron_right),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
         ),
-        const SizedBox(height: 10),
-        ListTile(
-          tileColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-            side: const BorderSide(color: Color(0xFFE2E8F0)),
-          ),
-          leading: const Icon(Icons.analytics_outlined),
-          title: const Text('SMS activity'),
-          subtitle: const Text('Monitor sent alerts and delivery status'),
-          trailing: const Icon(Icons.chevron_right),
-        ),
+        FilledButton(onPressed: _save, child: const Text('Save')),
       ],
     );
   }
-}
-
-String formatDateTime(DateTime value) {
-  final hour = value.hour > 12 ? value.hour - 12 : value.hour;
-  final displayHour = hour == 0 ? 12 : hour;
-  final minute = value.minute.toString().padLeft(2, '0');
-  final suffix = value.hour >= 12 ? 'PM' : 'AM';
-  return '${monthName(value.month)} ${value.day}, $displayHour:$minute $suffix';
-}
-
-String monthName(int month) {
-  const names = [
-    'January',
-    'February',
-    'March',
-    'April',
-    'May',
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December',
-  ];
-  return names[month - 1];
 }
